@@ -1,0 +1,7 @@
+services:
+  pixo-display:
+    image: ghcr.io/emilw/pixo-display:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - PIXOO_IP=192.168.10.139

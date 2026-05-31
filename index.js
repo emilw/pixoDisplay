@@ -20,7 +20,7 @@ const ipArg = args.find(arg => /^\d+\.\d+\.\d+\.\d+$/.test(arg));
 const dateArg = args.find(arg => /^\d{4}-\d{2}-\d{2}$/.test(arg));
 const customDate = dateArg ? new Date(dateArg) : null;
 const testMode = args.some(arg => arg === '--test-mode' || arg === '-t');
-const pixooIp = ipArg || process.env.PIXOO_IP;
+let pixooIp = ipArg || process.env.PIXOO_IP;
 const calendarFeeds = parseCalendarFeeds(process.env.CALENDAR_FEEDS);
 
 // Validate date if provided
@@ -35,16 +35,22 @@ console.log(`Detected IP: ${pixooIp || 'none'}`);
 console.log(`Detected date: ${dateArg || 'today'}`);
 console.log(`Test mode: ${testMode}\n`);
 
-// Require IP address
-if (!pixooIp) {
-  console.error('❌ Error: IP address is required');
-  console.error('Usage: node index.js [IP_ADDRESS] [YYYY-MM-DD] [--test-mode|-t]');
-  console.error('Or set PIXOO_IP in environment');
-  console.error('Example: node index.js 192.168.10.139');
-  console.error('Example: node index.js 192.168.10.139 2026-04-05');
-  console.error('Example: node index.js 192.168.10.139 --test-mode');
-  console.error('Example: node index.js 192.168.10.139 2026-04-05 --test-mode');
-  process.exit(1);
+async function resolvePixooIp() {
+  if (pixooIp) return;
+  console.log('No IP provided — scanning local network for Pixoo devices...');
+  const found = await DivoomPixoo.discover();
+  if (found.length === 0) {
+    console.error('❌ No Pixoo devices found on the network.');
+    console.error('Pass an IP explicitly: node index.js 192.168.x.x');
+    process.exit(1);
+  }
+  if (found.length > 1) {
+    console.log(`Found multiple devices: ${found.join(', ')}`);
+    console.log(`Using first: ${found[0]}`);
+  } else {
+    console.log(`Found Pixoo at ${found[0]}`);
+  }
+  pixooIp = found[0];
 }
 
 /**
@@ -73,6 +79,8 @@ async function runTestMode() {
  * Main orchestration function
  */
 async function main() {
+  await resolvePixooIp();
+
   if (testMode) {
     // Run in test mode (hello world)
     await runTestMode();

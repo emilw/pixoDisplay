@@ -1,6 +1,60 @@
 import axios from 'axios';
+import os from 'os';
+import net from 'net';
 
 export class DivoomPixoo {
+  static async discover(timeout = 500) {
+    const subnets = new Set();
+    for (const ifaces of Object.values(os.networkInterfaces())) {
+      for (const iface of ifaces) {
+        if (iface.family === 'IPv4' && !iface.internal) {
+          const parts = iface.address.split('.');
+          subnets.add(`${parts[0]}.${parts[1]}.${parts[2]}`);
+        }
+      }
+    }
+
+    if (subnets.size === 0) return [];
+
+    const checkPort = (ip) => new Promise(resolve => {
+      const socket = new net.Socket();
+      socket.setTimeout(timeout);
+      socket.on('connect', () => { socket.destroy(); resolve(true); });
+      socket.on('timeout', () => { socket.destroy(); resolve(false); });
+      socket.on('error', () => resolve(false));
+      socket.connect(80, ip);
+    });
+
+    const verifyPixoo = async (ip) => {
+      try {
+        const response = await axios.post(
+          `http://${ip}:80/post`,
+          { Command: 'Channel/GetAllConf' },
+          { headers: { 'Content-Type': 'application/json' }, timeout: timeout * 2 }
+        );
+        if (response.data && 'error_code' in response.data) return ip;
+      } catch {}
+      return null;
+    };
+
+    const found = [];
+    for (const subnet of subnets) {
+      const ips = Array.from({ length: 254 }, (_, i) => `${subnet}.${i + 1}`);
+      const chunkSize = 50;
+      const openIPs = [];
+      for (let i = 0; i < ips.length; i += chunkSize) {
+        const results = await Promise.all(
+          ips.slice(i, i + chunkSize).map(async ip => (await checkPort(ip)) ? ip : null)
+        );
+        openIPs.push(...results.filter(Boolean));
+      }
+      const verified = await Promise.all(openIPs.map(verifyPixoo));
+      found.push(...verified.filter(Boolean));
+    }
+
+    return found;
+  }
+
   constructor(ip, port = 80) {
     this.ip = ip;
     this.port = port;
