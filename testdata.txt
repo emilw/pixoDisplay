@@ -1,0 +1,4 @@
+'webcal://example.com/private-team-calendar',
+'webcal://example.com/family-calendar',
+'webcal://example.com/icloud-published-calendar-token',
+'https://api.dagsmart.se/ical/holidays'

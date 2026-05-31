@@ -1,0 +1,20 @@
+{
+  "name": "pixel-frame",
+  "version": "1.0.0",
+  "description": "Node.js controller for Divoom Pixoo display",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "calendar": "node calendar-display.js",
+    "hello-world": "node hello-world.js"
+  },
+  "keywords": ["divoom", "pixoo", "pixel", "display"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.6.2",
+    "dotenv": "^16.5.0",
+    "node-ical": "^0.18.0"
+  }
+}
