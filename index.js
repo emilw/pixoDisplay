@@ -1,6 +1,8 @@
 import { startCalendarDisplay } from './calendar-display.js';
 import { DivoomPixoo } from './divoom-pixoo.js';
-import 'dotenv/config';
+import { config } from 'dotenv';
+config({ path: '/config/.env' }); // Docker volume mount
+config();                          // local .env fallback
 
 function parseCalendarFeeds(rawFeeds) {
   if (!rawFeeds) {
