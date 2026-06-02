@@ -13,81 +13,47 @@ function parseCalendarFeeds(rawFeeds) {
     .filter(Boolean);
 }
 
-async function displayCalendar(pixooIp, customDate = null, calendarFeeds = []) {
-  try {
-    const pixoo = new DivoomPixoo(pixooIp);
-    const calendar = new CalendarService([], customDate);
+async function fetchSummary(calendarFeeds, customDate) {
+  const calendar = new CalendarService([], customDate);
+  calendarFeeds.forEach(feed => calendar.addFeed(feed));
+  const displayDate = customDate || new Date();
+  console.log(`Fetching calendar events for: ${displayDate.toDateString()}\n`);
+  return await calendar.getDailySummary();
+}
 
-    if (calendarFeeds.length === 0) {
-      throw new Error('No calendar feeds configured. Set CALENDAR_FEEDS environment variable.');
-    }
-    
-    // Add all calendar feeds
-    calendarFeeds.forEach(feed => calendar.addFeed(feed));
-    
-    const displayDate = customDate || new Date();
-    console.log(`Fetching calendar events for: ${displayDate.toDateString()}\n`);
-    const summary = await calendar.getDailySummary();
-    
-    // Display summary in console
-    console.log('📅 TODAY:');
-    if (summary.today.length === 0) {
-      console.log('  No events today');
-    } else {
-      summary.today.forEach(event => {
-        console.log(`  ${event.time} - ${event.summary}`);
-      });
-    }
-    
-    console.log('\n📅 TOMORROW:');
-    if (summary.tomorrow.length === 0) {
-      console.log('  No events tomorrow');
-    } else {
-      summary.tomorrow.forEach(event => {
-        console.log(`  ${event.time} - ${event.summary}`);
-      });
-    }
-    
-    console.log('\n📅 WEEKEND:');
-    const satDate = summary.weekend.saturdayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const sunDate = summary.weekend.sundayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    
-    console.log(`  Saturday (${satDate}):`);
-    if (summary.weekend.saturday.length === 0) {
-      console.log('    No events');
-    } else {
-      summary.weekend.saturday.forEach(event => {
-        console.log(`    ${event.time} - ${event.summary}`);
-      });
-    }
-    
-    console.log(`  Sunday (${sunDate}):`);
-    if (summary.weekend.sunday.length === 0) {
-      console.log('    No events');
-    } else {
-      summary.weekend.sunday.forEach(event => {
-        console.log(`    ${event.time} - ${event.summary}`);
-      });
-    }
-    
-    // Clear the screen completely to remove any old text/drawings from memory
-    console.log('\n📺 Initializing display...');
-    await pixoo.clearAll();
-    await new Promise(resolve => setTimeout(resolve, 20));
-    
-    // Display on Pixoo - cycle through 4 screens
-    console.log('Starting calendar slideshow (4 screens, 6 seconds each)...');
-    console.log('Press Ctrl+C to stop\n');
-    const intervalId = await displaySlideshowOnPixoo(pixoo, summary);
-    
-    console.log('✓ Calendar display updated!');
-    
-    return { intervalId, displayDate };
-    
-  } catch (error) {
-    console.error('Error:', error.message);
-    return null;
+function logSummary(summary) {
+  console.log('📅 TODAY:');
+  if (summary.today.length === 0) {
+    console.log('  No events today');
+  } else {
+    summary.today.forEach(event => console.log(`  ${event.time} - ${event.summary}`));
   }
+
+  console.log('\n📅 TOMORROW:');
+  if (summary.tomorrow.length === 0) {
+    console.log('  No events tomorrow');
+  } else {
+    summary.tomorrow.forEach(event => console.log(`  ${event.time} - ${event.summary}`));
+  }
+
+  console.log('\n📅 WEEKEND:');
+  const satDate = summary.weekend.saturdayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const sunDate = summary.weekend.sundayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  console.log(`  Saturday (${satDate}):`);
+  summary.weekend.saturday.forEach(event => console.log(`    ${event.time} - ${event.summary}`));
+  console.log(`  Sunday (${sunDate}):`);
+  summary.weekend.sunday.forEach(event => console.log(`    ${event.time} - ${event.summary}`));
+}
+
+async function displayCalendar(pixoo, summary) {
+  console.log('\n📺 Initializing display...');
+  await pixoo.clearAll();
+  await new Promise(resolve => setTimeout(resolve, 20));
+  console.log('Starting calendar slideshow (4 screens, 6 seconds each)...');
+  console.log('Press Ctrl+C to stop\n');
+  const intervalId = await displaySlideshowOnPixoo(pixoo, summary);
+  console.log('✓ Calendar display updated!');
+  return intervalId;
 }
 
 async function displaySlideshowOnPixoo(pixoo, summary) {
@@ -130,11 +96,18 @@ async function displaySlideshowOnPixoo(pixoo, summary) {
     currentScreen = (currentScreen + 1) % 4;
   };
   
+  const safeShowScreen = async () => {
+    try {
+      await showScreen();
+    } catch (error) {
+      console.error('Display error (will retry next cycle):', error.message);
+    }
+  };
+
   // Show first screen immediately
-  await showScreen();
-  
-  // Then cycle through screens every 10 seconds (increased for better readability)
-  const intervalId = setInterval(showScreen, 10000);
+  await safeShowScreen();
+
+  const intervalId = setInterval(safeShowScreen, 10000);
   return intervalId;
 }
 
@@ -218,29 +191,39 @@ export async function startCalendarDisplay(
   if (customDate) {
     console.log(`Using custom date: ${customDate.toDateString()}`);
   }
-  
+
+  const pixoo = new DivoomPixoo(pixooIp);
   let currentIntervalId = null;
   let currentDay = null;
-  
+  let cachedSummary = null;
+
   const checkAndRefresh = async () => {
     const now = new Date();
     const today = now.toDateString();
-    
-    // If day has changed (or first run), refresh the calendar
+
     if (today !== currentDay) {
       console.log(`\n${currentDay ? '📅 Day changed!' : '🚀 Starting calendar display...'} Refreshing data for ${today}\n`);
-      
-      // Clear old interval if exists
-      if (currentIntervalId) {
-        clearInterval(currentIntervalId);
+
+      if (currentIntervalId) clearInterval(currentIntervalId);
+
+      let summary = null;
+      try {
+        summary = await fetchSummary(calendarFeeds, customDate);
+        cachedSummary = summary;
+        logSummary(summary);
+      } catch (error) {
+        console.error('Failed to fetch calendar data:', error.message);
+        if (cachedSummary) {
+          console.log('Using cached calendar data from previous fetch...');
+          summary = cachedSummary;
+        } else {
+          console.error('No cached data available, will retry next minute.');
+          return;
+        }
       }
-      
-      // Start new display with fresh data
-      const result = await displayCalendar(pixooIp, customDate, calendarFeeds);
-      if (result) {
-        currentIntervalId = result.intervalId;
-        currentDay = today;
-      }
+
+      currentIntervalId = await displayCalendar(pixoo, summary);
+      currentDay = today;
     }
   };
   
