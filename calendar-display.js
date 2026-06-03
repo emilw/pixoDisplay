@@ -222,8 +222,12 @@ export async function startCalendarDisplay(
         }
       }
 
-      currentIntervalId = await displayCalendar(pixoo, summary);
-      currentDay = today;
+      try {
+        currentIntervalId = await displayCalendar(pixoo, summary);
+        currentDay = today;
+      } catch (error) {
+        console.error('Failed to initialize display (will retry next minute):', error.message);
+      }
     }
   };
   
