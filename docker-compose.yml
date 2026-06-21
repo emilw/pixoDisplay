@@ -5,5 +5,6 @@ services:
     env_file: .env
     environment:
       - PIXOO_IP=192.168.10.139
+      - TZ=Europe/Stockholm
     volumes:
       - /volume1/docker/pixo-display:/config:ro
